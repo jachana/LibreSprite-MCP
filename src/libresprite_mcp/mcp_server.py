@@ -105,9 +105,7 @@ class MCPServer:
                     or mode not in ("rgb", "grayscale", "indexed")):
                 raise RuntimeError("LibreSprite did not return a valid pixel result.")
             if mode == "indexed":
-                index = result.get("palette_index")
-                if type(index) is not int or index < 0 or index != value:
-                    raise RuntimeError("LibreSprite did not return a valid indexed pixel result.")
+                if (type(index) is not int or not 0 <= index <= 255 or index != value):
             else:
                 rgba = result.get("rgba")
                 if (not isinstance(rgba, list) or len(rgba) != 4
