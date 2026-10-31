@@ -14,7 +14,7 @@ class ScriptProxy:
     def __init__(self, app):
         self.app = app
         self.calls = 0
-    def run_script(self, script, ctx):
+    async def run_script(self, script, ctx):
         self.calls += 1
         setup = '''
 const spec = APP;
@@ -32,7 +32,7 @@ if (app.activeImage) app.activeImage.getPixel = (x,y) => {
  reads++; return spec.value;
 };
 '''.replace('APP', json.dumps(self.app))
-        result = subprocess.run(['node', '-e', setup + script + '\nconsole.error(reads);'], text=True, capture_output=True, check=True)
+        result = await asyncio.to_thread(subprocess.run, ['node', '-e', setup + script + '\nconsole.error(reads);'], text=True, capture_output=True, check=True)
         self.reads = int(result.stderr.strip())
         return result.stdout.strip()
 
@@ -47,8 +47,8 @@ class ReadPixelTests(unittest.IsolatedAsyncioTestCase):
         release = threading.Event()
         class BlockingProxy:
             released_during_wait = False
-            def run_script(self, script, ctx):
-                self.released_during_wait = release.wait(timeout=0.3)
+            async def run_script(self, script, ctx):
+                self.released_during_wait = await asyncio.to_thread(release.wait, 0.3)
                 return '{"x": 1, "y": 2, "color_mode": "rgb", "value": 2150834705, "rgba": [17, 34, 51, 128]}'
         proxy = BlockingProxy()
         async def release_from_event_loop():
@@ -106,7 +106,7 @@ class ReadPixelTests(unittest.IsolatedAsyncioTestCase):
 class ReadPixelResponseTests(unittest.IsolatedAsyncioTestCase):
     async def response(self, output):
         class Proxy:
-            def run_script(self, script, ctx):
+            async def run_script(self, script, ctx):
                 return output
         content = await MCPServer(Proxy()).mcp.call_tool('read_pixel', {'x': 1, 'y': 2})
         if isinstance(content, tuple):

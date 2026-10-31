@@ -2,7 +2,6 @@
 MCP server implementation that exposes tools for interacting with the libresprite-proxy server.
 """
 
-import asyncio
 import json
 import os
 from pydantic import StrictInt
@@ -29,7 +28,7 @@ class MCPServer:
         """Setup MCP tools."""
 
         @self.mcp.tool()
-        def run_script(script: str, ctx: Context) -> str:
+        async def run_script(script: str, ctx: Context) -> str:
             """
             Run a JavaScript script inside Libresprite.
 
@@ -41,7 +40,7 @@ class MCPServer:
             Returns:
                 Console output
             """
-            return self._libresprite_proxy.run_script(script, ctx)
+            return await self._libresprite_proxy.run_script(script, ctx)
 
         @self.mcp.tool()
         async def read_pixel(x: StrictInt, y: StrictInt, ctx: Context) -> dict:
@@ -88,7 +87,7 @@ class MCPServer:
     console.log(JSON.stringify(result));
 })();
 """.replace("X_COORD", str(x)).replace("Y_COORD", str(y))
-            output = await asyncio.to_thread(self._libresprite_proxy.run_script, script, ctx)
+            output = await self._libresprite_proxy.run_script(script, ctx)
             try:
                 result = json.loads(output)
             except (TypeError, ValueError) as exc:
