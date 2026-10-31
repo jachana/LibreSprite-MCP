@@ -22,8 +22,8 @@ class LibrespriteProxy:
         # Stores output of the script execution
         self._output: str | None = None
 
-        # Stores flag indicating if execution is in progress
-        self._lock: bool = False
+        # Atomically admits one caller for the full script/output exchange.
+        self._lock = threading.Lock()
 
         # Initialize event handlers
         self._script_event = threading.Event()
@@ -53,7 +53,7 @@ class LibrespriteProxy:
         @self.app.post('/')
         def post_output():
             """Post execution output."""
-            if not self._lock:
+            if not self._lock.locked():
                 # ignore random requests
                 return jsonify({"status": "ignored"})
             req = request.get_json(force=True, silent=True)
@@ -100,25 +100,26 @@ class LibrespriteProxy:
             script: The script to execute
         """
         # This proxy only allows one script to be executed at a time
-        if self._lock:
+        if not self._lock.acquire(blocking=False):
             ctx.error("Script execution is already in progress...")
             raise RuntimeError("Script execution is already in progress.")
 
-        # Sending the script
-        ctx.info("Sending script to libresprite...")
-        self._lock = True
-        self._script = script
-        self._script_event.set()
+        try:
+            # Sending the script
+            ctx.info("Sending script to libresprite...")
+            self._script = script
+            self._script_event.set()
 
-        # Waiting for execution
-        if not self._output_event.wait(timeout=15):
-            ctx.warning("This is taking longer than usual, make sure the user has the Libresprite application with the remote script running?")
-        self._output_event.wait()
-        self._output_event.clear()
+            # Waiting for execution
+            if not self._output_event.wait(timeout=15):
+                ctx.warning("This is taking longer than usual, make sure the user has the Libresprite application with the remote script running?")
+            self._output_event.wait()
+            self._output_event.clear()
 
-        # Return the output
-        ctx.info("Script execution completed, checking the logs...")
-        output = self._output
-        self._output = None
-        self._lock = False
-        return output
+            # Return the output
+            ctx.info("Script execution completed, checking the logs...")
+            output = self._output
+            self._output = None
+            return output
+        finally:
+            self._lock.release()
